@@ -1,3 +1,29 @@
+// Programmer(s):  Natalie DellaMaria
+//
+// In the design of this program, I/we have followed the five steps
+//   listed in section 5.5.1 of the textbook.
+//
+// The structure of the program is consistent with the best practices
+//   listed in section 5.5.2 of the textbook.
+// - Accesses to resource state variables and synchronization variables
+//   are only made in the shared object methods, and not in the code
+//   that uses resource objects. Although the program is written in C,
+//   the object-oriented interface is:
+//   * Constructor method is resource_init().
+//   * Destructor method is resource_reclaim().
+//   * Public methods are resource_allocate(), resource_release(),
+//     and resource_print().
+// - A lock is used to synchronize all accesses to the state variables,
+//   and a condition variable is used to cause threads to wait on
+//   resource availability.
+// - The lock is acquired at the beginning of methods and released
+//   before returns.
+// - The lock is held whenever a condition variable operation (wait or
+//   signal) is called.
+// - The wait operation on a condition variable is done inside a loop.
+// - sleep() is not used in the object methods for synchronization.
+
+
 // CPSC/ECE 3220 summer 2018 resource allocation code
 //
 // compile with "gcc -Wall resource.c -pthread"
@@ -34,8 +60,10 @@ typedef struct resource_type_tag{
                           //     after a vector to catch some overflows
 
     // synchronization variables
-
 	// need to add them here
+	pthread_mutex_t lock;
+	pthread_cond_t rcAlloc;
+	pthread_cond_t rcDealloc;
 
     // methods other than init (constructor) and reclaim (destructor)
 
@@ -130,9 +158,15 @@ resource_t * resource_init( int type, int total ){
 
     // call to pthread_mutex_init() with rc as return code
     // if( rc != 0 ) resource_error( 3 );
+    rc = pthread_mutex_init(r->lock, NULL);
+    if( rc! = 0 )
+    	resource_error( 3 );
 
     // call to pthread_cond_init() with rc as return code
     // if( rc != 0 ) resource_error( 4 );
+    rc = pthread_cond_init(r->cv, NULL);
+    if( rc != 0 )
+    	resource_error( 4 );
 
     r->print = &resource_print;           // set method pointers
     r->allocate = &resource_allocate;
@@ -151,7 +185,11 @@ void resource_reclaim( resource_t *r ){
 
     if( resource_check( r ) ) resource_error( 5 );
     // call to pthread_cond_destroy()
+    pthread_cond_destroy(r->cv)
+
     // call to pthread_mutex_destroy()
+    pthread_mutex_destroy(r->lock)
+
     free( r->owner );
     free( r->status );
     free( r );
@@ -164,6 +202,8 @@ void resource_reclaim( resource_t *r ){
 
 int resource_allocate( struct resource_type_tag *self, int tid ){
     int rid;
+
+    lock.acquire();
 
     if( resource_check( self ) )          // signature check
         resource_error( 7 );
@@ -181,10 +221,13 @@ int resource_allocate( struct resource_type_tag *self, int tid ){
     self->owner[rid] = tid;               // record which thread has it
     self->available_count--;              // decr count of available resources
 
+    lock.release();
     return rid;
 }
 
 void resource_release( struct resource_type_tag *self, int tid, int rid ){
+
+	lock.acquire();
 
     if( resource_check( self ) )          // signature check
         resource_error( 9 );
@@ -197,6 +240,7 @@ void resource_release( struct resource_type_tag *self, int tid, int rid ){
     self->owner[rid] = -1;                // reset ownership
     self->available_count++;              // incr count of available resources
 
+    lock.release();
 }
 
 void resource_print( struct resource_type_tag *self ){
